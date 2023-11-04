@@ -1,7 +1,7 @@
 const NodeCache = require("node-cache");
 
 const cache = new NodeCache({
-  stdTTL: 3600, // 缓存默认过期时间（单位秒）
+  stdTTL: 7200, // 缓存默认过期时间（单位秒）
   checkperiod: 60, // 定期检查过期缓存的时间（单位秒）
 });
 
