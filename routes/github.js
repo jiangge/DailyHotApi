@@ -1,40 +1,72 @@
+/*
+ * @author: x-dr
+ * @date: 2023-12-25
+ * @customEditors: imsyy
+ * @lastEditTime: 2023-12-27
+ */
+
 const Router = require("koa-router");
-const lolRouter = new Router();
+const githubNewRouter = new Router();
 const axios = require("axios");
+const cheerio = require("cheerio");
 const { get, set, del } = require("../utils/cacheData");
 
 // 接口信息
 const routerInfo = {
-  name: "lol",
-  title: "英雄联盟",
-  subtitle: "更新公告",
+  name: "github",
+  title: "Github",
+  subtitle: "trending",
 };
 
 // 缓存键名
-const cacheKey = "lolData";
+const cacheKey = "githubData";
 
 // 调用时间
 let updateTime = new Date().toISOString();
 
-// 调用路径
-const url =
-  "https://apps.game.qq.com/cmc/zmMcnTargetContentList?r0=jsonp&page=1&num=16&target=24&source=web_pc";
+const url = "https://github.com/trending";
+
+const headers = {
+  "User-Agent":
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
+};
 
 // 数据处理
 const getData = (data) => {
-  if (!data) return [];
+  if (!data) return false;
   const dataList = [];
+  const $ = cheerio.load(data);
   try {
-    const match = data.match(/callback\((.*)\)/);
-    const jsonObject = JSON.parse(match[1]).data.result;
-    jsonObject.forEach((v) => {
+    $(`.Box-row`).each((i, e) => {
+      // console.log(getCheerio(e).html());
+      const item = cheerio.load($(e).html());
+      // console.log(item);
+      const title = item("h2 a").attr("href").replace("/", "");
+      const url = `https://github.com/${title}`;
+      const excerpt = item("p")
+        .text()
+        .replace(/(^\s*)|(\s*$)/g, "");
+      const language = item('.f6 span[itemprop="programmingLanguage"]')
+        .text()
+        .replace(/(^\s*)|(\s*$)/g, "");
+      const stars = item(".f6 a:first")
+        .text()
+        .replace(/(^\s*)|(\s*$)/g, "");
+      const forks = item(".f6 a:eq(1)")
+        .text()
+        .replace(/(^\s*)|(\s*$)/g, "");
+      const starstoday = item(".f6 span:eq(4)")
+        .text()
+        .replace(/(^\s*)|(\s*$)/g, "");
+
       dataList.push({
-        title: v.sTitle,
-        desc: v.sAuthor,
-        pic: `https:${v.sIMG}`,
-        hot: Number(v.iTotalPlay),
-        url: `https://lol.qq.com/news/detail.shtml?docid=${encodeURIComponent(v.iDocID)}`,
-        mobileUrl: `https://lol.qq.com/news/detail.shtml?docid=${encodeURIComponent(v.iDocID)}`,
+        title: title,
+        desc: excerpt,
+        url: url,
+        language: language,
+        stars: stars,
+        forks: forks,
+        starstoday: starstoday,
       });
     });
     return dataList;
@@ -44,19 +76,21 @@ const getData = (data) => {
   }
 };
 
-// 英雄联盟更新公告
-lolRouter.get("/lol", async (ctx) => {
-  console.log("获取英雄联盟更新公告");
+// trending
+githubNewRouter.get("/github", async (ctx) => {
+  console.log("获取github trending");
   try {
     // 从缓存中获取数据
     let data = await get(cacheKey);
     const from = data ? "cache" : "server";
     if (!data) {
       // 如果缓存中不存在数据
-      console.log("从服务端重新获取英雄联盟更新公告");
+      console.log("从服务端重新github trending");
       // 从服务器拉取数据
-      const response = await axios.get(url);
+      const response = await axios.get(url, { headers });
+      // console.log(response.data);
       data = getData(response.data);
+
       updateTime = new Date().toISOString();
       if (!data) {
         ctx.body = {
@@ -82,28 +116,29 @@ lolRouter.get("/lol", async (ctx) => {
     console.error(error);
     ctx.body = {
       code: 500,
+      ...routerInfo,
       message: "获取失败",
     };
   }
 });
 
-// 英雄联盟更新公告 - 获取最新数据
-lolRouter.get("/lol/new", async (ctx) => {
-  console.log("获取英雄联盟更新公告 - 最新数据");
+// trending - 获取最新数据
+githubNewRouter.get("/github/new", async (ctx) => {
+  console.log("获取github trending  - 最新数据");
   try {
     // 从服务器拉取最新数据
-    const response = await axios.get(url);
+    const response = await axios.get(url, { headers });
     const newData = getData(response.data);
     updateTime = new Date().toISOString();
-    console.log("从服务端重新获取英雄联盟更新公告");
+    console.log("从服务端重新github trending");
 
     // 返回最新数据
     ctx.body = {
       code: 200,
       message: "获取成功",
       ...routerInfo,
-      total: newData.length,
       updateTime,
+      total: newData.length,
       data: newData,
     };
 
@@ -135,5 +170,5 @@ lolRouter.get("/lol/new", async (ctx) => {
   }
 });
 
-lolRouter.info = routerInfo;
-module.exports = lolRouter;
+githubNewRouter.info = routerInfo;
+module.exports = githubNewRouter;
