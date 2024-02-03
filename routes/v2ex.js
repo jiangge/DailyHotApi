@@ -1,33 +1,37 @@
+/**
+ *  @author: x-dr
+ *  @date: 2023-12-25
+ * @customEditors: imsyy
+ * @lastEditTime: 2024-01-02
+ */
+
 const Router = require("koa-router");
-const itHomeRouter = new Router();
+const v2exRouter = new Router();
 const axios = require("axios");
 const cheerio = require("cheerio");
 const { get, set, del } = require("../utils/cacheData");
 
 // 接口信息
 const routerInfo = {
-  name: "ithome",
-  title: "IT之家",
-  subtitle: "热榜",
+  name: "v2ex",
+  title: "V2EX",
+  subtitle: "hot",
 };
 
 // 缓存键名
-const cacheKey = "itHomeData";
+const cacheKey = "v2exData";
 
 // 调用时间
 let updateTime = new Date().toISOString();
 
-// 调用路径
-const url = "https://m.ithome.com/rankm/";
-const headers = {
-  "User-Agent":
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
-};
+const url = "https://www.v2ex.com/?tab=hot";
 
-// it之家特殊处理 - url
-const replaceLink = (url) => {
-  const match = url.match(/[html|live]\/(\d+)\.htm/)[1];
-  return `https://www.ithome.com/0/${match.slice(0, 3)}/${match.slice(3)}.htm`;
+const headers = {
+  "Content-Type": "application/json",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+  authority: "www.v2ex.com",
+  referer: "https://www.v2ex.com/",
 };
 
 // 数据处理
@@ -36,30 +40,36 @@ const getData = (data) => {
   const dataList = [];
   const $ = cheerio.load(data);
   try {
-    $(".rank-name").each(() => {
-      const type = $(this).data("rank-type");
-      const newListHtml = $(this).next(".rank-box").html();
-      cheerio
-        .load(newListHtml)(".placeholder")
-        .get()
-        .map((v) => {
-          dataList.push({
-            title: $(v).find(".plc-title").text(),
-            img: $(v).find("img").attr("data-original"),
-            time: $(v).find(".post-time").text(),
-            type: $(this).text(),
-            typeName: type,
-            hot: Number($(v).find(".review-num").text().replace(/\D/g, "")),
-            url: replaceLink($(v).find("a").attr("href")),
-            mobileUrl: $(v).find("a").attr("href"),
-          });
-        });
-      // dataList[type] = {
-      //   name: $(this).text(),
-      //   total: newsList.length,
-      //   list: newsList,
-      // };
+    $(`div[class="cell item"]`).each((i, e) => {
+      const item = cheerio.load($(e).html());
+      const title = item('span[class="item_title"]')
+        .text()
+        .replace(/(^\s*)|(\s*$)/g, "");
+      const href = item(".item_title a").attr("href");
+      const url = `https://www.v2ex.com${href}`;
+      const comments = item(".count_livid")
+        .text()
+        .replace(/(^\s*)|(\s*$)/g, "");
+      const member = item(".topic_info strong a:first")
+        .text()
+        .replace(/(^\s*)|(\s*$)/g, "");
+      const node = item(".topic_info .node")
+        .text()
+        .replace(/(^\s*)|(\s*$)/g, "");
+      const avatar_img = item(".avatar").attr("src");
+      // console.log( url);
+
+      dataList.push({
+        title: title,
+        url: url,
+        mobileUrl: url,
+        comments: comments,
+        member: member,
+        node: node,
+        avatar: avatar_img,
+      });
     });
+
     return dataList;
   } catch (error) {
     console.error("数据处理出错" + error);
@@ -67,19 +77,21 @@ const getData = (data) => {
   }
 };
 
-// IT之家热榜
-itHomeRouter.get("/ithome", async (ctx) => {
-  console.log("获取IT之家热榜");
+// v2ex
+v2exRouter.get("/v2ex", async (ctx) => {
+  console.log("获取v2ex");
   try {
     // 从缓存中获取数据
     let data = await get(cacheKey);
     const from = data ? "cache" : "server";
     if (!data) {
       // 如果缓存中不存在数据
-      console.log("从服务端重新获取IT之家热榜");
+      console.log("从服务端重新获取v2ex");
       // 从服务器拉取数据
       const response = await axios.get(url, { headers });
+      // console.log(response.data);
       data = getData(response.data);
+
       updateTime = new Date().toISOString();
       if (!data) {
         ctx.body = {
@@ -111,15 +123,15 @@ itHomeRouter.get("/ithome", async (ctx) => {
   }
 });
 
-// IT之家热榜 - 获取最新数据
-itHomeRouter.get("/ithome/new", async (ctx) => {
-  console.log("获取IT之家热榜 - 最新数据");
+// v2ex - 获取最新数据
+v2exRouter.get("/v2ex/new", async (ctx) => {
+  console.log("获取v2ex  - 最新数据");
   try {
     // 从服务器拉取最新数据
     const response = await axios.get(url, { headers });
     const newData = getData(response.data);
     updateTime = new Date().toISOString();
-    console.log("从服务端重新获取IT之家热榜");
+    console.log("从服务端重新获取v2ex");
 
     // 返回最新数据
     ctx.body = {
@@ -159,5 +171,5 @@ itHomeRouter.get("/ithome/new", async (ctx) => {
   }
 });
 
-itHomeRouter.info = routerInfo;
-module.exports = itHomeRouter;
+v2exRouter.info = routerInfo;
+module.exports = v2exRouter;

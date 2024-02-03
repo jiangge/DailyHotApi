@@ -1,64 +1,57 @@
+/**
+ * @author: x-dr
+ * @date: 2023-12-25
+ * @customEditors: imsyy
+ * @lastEditTime: 2024-01-02
+ */
+
 const Router = require("koa-router");
-const itHomeRouter = new Router();
+const ngabbsRouter = new Router();
 const axios = require("axios");
-const cheerio = require("cheerio");
 const { get, set, del } = require("../utils/cacheData");
 
 // 接口信息
-const routerInfo = {
-  name: "ithome",
-  title: "IT之家",
-  subtitle: "热榜",
-};
+const routerInfo = { name: "ngabbs", title: "NGA", subtitle: "论坛热帖" };
 
 // 缓存键名
-const cacheKey = "itHomeData";
+const cacheKey = "ngabbsData";
 
 // 调用时间
 let updateTime = new Date().toISOString();
 
-// 调用路径
-const url = "https://m.ithome.com/rankm/";
-const headers = {
-  "User-Agent":
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
-};
+const url =
+  "https://ngabbs.com/nuke.php?__lib=load_topic&__act=load_topic_reply_ladder2&opt=1&all=1";
 
-// it之家特殊处理 - url
-const replaceLink = (url) => {
-  const match = url.match(/[html|live]\/(\d+)\.htm/)[1];
-  return `https://www.ithome.com/0/${match.slice(0, 3)}/${match.slice(3)}.htm`;
+const headers = {
+  Host: "ngabbs.com",
+  "Content-Type": "application/x-www-form-urlencoded",
+  Accept: "*/*",
+  "Accept-Encoding": "gzip, deflate, br",
+  Connection: "keep-alive",
+  "Content-Length": "11",
+  "User-Agent": "NGA/7.3.1 (iPhone; iOS 17.2.1; Scale/3.00)",
+  "Accept-Language": "zh-Hans-CN;q=1",
+  Referer: "https://ngabbs.com/",
+  "X-User-Agent": "NGA_skull/7.3.1(iPhone13,2;iOS 17.2.1)",
 };
+const postData = { __output: "14" };
 
 // 数据处理
 const getData = (data) => {
-  if (!data) return false;
+  if (!data) return [];
   const dataList = [];
-  const $ = cheerio.load(data);
   try {
-    $(".rank-name").each(() => {
-      const type = $(this).data("rank-type");
-      const newListHtml = $(this).next(".rank-box").html();
-      cheerio
-        .load(newListHtml)(".placeholder")
-        .get()
-        .map((v) => {
-          dataList.push({
-            title: $(v).find(".plc-title").text(),
-            img: $(v).find("img").attr("data-original"),
-            time: $(v).find(".post-time").text(),
-            type: $(this).text(),
-            typeName: type,
-            hot: Number($(v).find(".review-num").text().replace(/\D/g, "")),
-            url: replaceLink($(v).find("a").attr("href")),
-            mobileUrl: $(v).find("a").attr("href"),
-          });
-        });
-      // dataList[type] = {
-      //   name: $(this).text(),
-      //   total: newsList.length,
-      //   list: newsList,
-      // };
+    const result = data.result[0];
+    result.forEach((result) => {
+      dataList.push({
+        author: result.author,
+        desc: result.subject,
+        parent: result.parent["2"],
+        tid: result.tid,
+        comments: Number(result.replies),
+        url: `https://bbs.nga.cn/read.php?tid=${result.tid}`,
+        mobileUrl: `https://bbs.nga.cn/read.php?tid=${result.tid}`,
+      });
     });
     return dataList;
   } catch (error) {
@@ -67,18 +60,18 @@ const getData = (data) => {
   }
 };
 
-// IT之家热榜
-itHomeRouter.get("/ithome", async (ctx) => {
-  console.log("获取IT之家热榜");
+// NGA论坛热帖
+ngabbsRouter.get("/ngabbs", async (ctx) => {
+  console.log("获取NGA论坛热帖");
   try {
     // 从缓存中获取数据
     let data = await get(cacheKey);
     const from = data ? "cache" : "server";
     if (!data) {
       // 如果缓存中不存在数据
-      console.log("从服务端重新获取IT之家热榜");
+      console.log("从服务端重新获取NGA论坛热帖");
       // 从服务器拉取数据
-      const response = await axios.get(url, { headers });
+      const response = await axios.post(url, postData, { headers });
       data = getData(response.data);
       updateTime = new Date().toISOString();
       if (!data) {
@@ -105,29 +98,28 @@ itHomeRouter.get("/ithome", async (ctx) => {
     console.error(error);
     ctx.body = {
       code: 500,
-      ...routerInfo,
       message: "获取失败",
     };
   }
 });
 
-// IT之家热榜 - 获取最新数据
-itHomeRouter.get("/ithome/new", async (ctx) => {
-  console.log("获取IT之家热榜 - 最新数据");
+// NGA论坛热帖 - 获取最新数据
+ngabbsRouter.get("/ngabbs/new", async (ctx) => {
+  console.log("获取NGA论坛热帖 - 最新数据");
   try {
     // 从服务器拉取最新数据
-    const response = await axios.get(url, { headers });
+    const response = await axios.post(url, postData, { headers });
     const newData = getData(response.data);
     updateTime = new Date().toISOString();
-    console.log("从服务端重新获取IT之家热榜");
+    console.log("从服务端重新获取NGA论坛热帖");
 
     // 返回最新数据
     ctx.body = {
       code: 200,
       message: "获取成功",
       ...routerInfo,
-      updateTime,
       total: newData.length,
+      updateTime,
       data: newData,
     };
 
@@ -159,5 +151,5 @@ itHomeRouter.get("/ithome/new", async (ctx) => {
   }
 });
 
-itHomeRouter.info = routerInfo;
-module.exports = itHomeRouter;
+ngabbsRouter.info = routerInfo;
+module.exports = ngabbsRouter;
