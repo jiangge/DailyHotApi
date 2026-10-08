@@ -22,4 +22,4 @@ if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "docker")
   serveHotApi(config.PORT);
 }
 
-export default serveHotApi;
+export default app;
